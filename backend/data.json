@@ -1,0 +1,10 @@
+{
+  "settings": {
+    "inst_id": "BTC-USDT",
+    "buy_trigger": null,
+    "sell_trigger": null,
+    "order_size": null
+  },
+  "bot_status": "active",
+  "trade_history": []
+}
