@@ -1,4 +1,5 @@
 import asyncio
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -6,7 +7,14 @@ from okx_client import OKXClient
 from store import load_state, update_settings, set_bot_status
 from bot_loop import bot_loop, _fired
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    task = asyncio.create_task(bot_loop())
+    print("[main] bot_loop task started")  # confirm this line prints on startup
+    yield
+    task.cancel()
+
+app = FastAPI(lifespan=lifespan)
 client = OKXClient()
 
 app.add_middleware(
@@ -16,9 +24,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.on_event("startup")
-async def startup():
-    asyncio.create_task(bot_loop())
+# remove the old @app.on_event("startup") block entirely:
+# @app.on_event("startup")
+# async def startup():
+#     asyncio.create_task(bot_loop())
 
 class SettingsIn(BaseModel):
     inst_id: str

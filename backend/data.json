@@ -1,9 +1,9 @@
 {
   "settings": {
     "inst_id": "BTC-USDT",
-    "buy_trigger": null,
-    "sell_trigger": null,
-    "order_size": null
+    "buy_trigger": 84640.0,
+    "sell_trigger": 999999.0,
+    "order_size": "10"
   },
   "bot_status": "active",
   "trade_history": []

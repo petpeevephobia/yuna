@@ -24,6 +24,7 @@ async def bot_loop():
 
         try:
             price = client.get_ticker(inst_id)
+            print(f"[bot_loop] checked {inst_id} @ {price} (buy_trigger={buy_trigger}, sell_trigger={sell_trigger})")
         except Exception as e:
             print(f"[bot_loop] price fetch failed: {e}")
             set_bot_status("error")
@@ -32,7 +33,10 @@ async def bot_loop():
 
         if buy_trigger and price <= buy_trigger and not _fired["buy"]:
             try:
-                client.place_limit_order(inst_id, "buy", buy_trigger, order_size)
+                # order_size is entered by the user in USDT, but OKX spot limit
+                # orders require size in base currency (BTC) — convert here.
+                btc_qty = round(float(order_size) / buy_trigger, 6)
+                client.place_limit_order(inst_id, "buy", buy_trigger, str(btc_qty))
                 append_trade({
                     "timestamp": time.time(), "side": "buy",
                     "price": buy_trigger, "size": order_size,
