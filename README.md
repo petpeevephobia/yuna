@@ -1,8 +1,8 @@
-# Yuno
+# Yuna
 
-## Why Yuno
+## Why Yuna
 
-Yuno is a personal, no-nonsense crypto trading bot built on top of the OKX API. The idea is simple: set a buy price and a sell price for an asset, define how much to trade, and let Yuno watch the market and place limit orders when your triggers are hit - without needing to babysit a chart all day.
+Yuna is a personal, no-nonsense crypto trading bot built on top of the OKX API. The idea is simple: set a buy price and a sell price for an asset, define how much to trade, and let Yuno watch the market and place limit orders when your triggers are hit - without needing to babysit a chart all day.
 
 This MVP is deliberately narrow. No strategy engine, no backtesting, no multi-exchange abstraction. Just: watch price → hit trigger → place limit order → log it → repeat. Everything else comes later, once the core loop is proven reliable.
 
@@ -29,10 +29,10 @@ This MVP is deliberately narrow. No strategy engine, no backtesting, no multi-ex
 
 ## Tech Stack
 
-- **Python** - the bot engine. Owns all OKX API interaction, the price-check loop, and trigger logic. This is the core of Yuno.
+- **Python** - the bot engine. Owns all OKX API interaction, the price-check loop, and trigger logic. This is the core of Yuna.
 - **Next.js** - the UI. A single dashboard page that talks to the Python backend over a simple REST API (and optionally a WebSocket/SSE for live price updates).
 - **Go** - not used in the MVP. Held in reserve only if a specific piece later needs lower latency or concurrency than Python comfortably gives (e.g. a dedicated price-feed service). No Go code until there's a concrete reason for it.
-- **Docker** - not used in the MVP. Local dev runs the Python backend and Next.js frontend directly. Containerization gets added only if/when deployment (e.g. running Yuno on a VPS 24/7) makes it worthwhile.
+- **Docker** - not used in the MVP. Local dev runs the Python backend and Next.js frontend directly. Containerization gets added only if/when deployment (e.g. running Yuna on a VPS 24/7) makes it worthwhile.
 
 
 
@@ -110,7 +110,7 @@ This MVP is deliberately narrow. No strategy engine, no backtesting, no multi-ex
 ## Project Structure (suggested)
 
 ```
-yuno/
+yuna/
 ├── backend/
 │   ├── main.py            # FastAPI app entrypoint
 │   ├── okx_client.py      # OKX API wrapper (auth, price, balances, orders)
