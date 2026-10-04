@@ -66,7 +66,7 @@ async def bot_loop():
                     print(f"[bot_loop] Sell skipped: Insufficient BTC balance ({available_btc})")
                     continue
 
-                # 2. Sell your ENTIRE available BTC cache instead of back-calculating a fractional size
+                # 2. Sell your [ENTIRE] available BTC cache instead of back-calculating a fractional size
                 sell_size = str(round(available_btc, 6))
                 
                 # Place the limit sell order at the current market price rather than the trigger line

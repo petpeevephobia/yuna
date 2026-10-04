@@ -41,7 +41,8 @@ class OKXClient:
         
         body_str = "" if body is None else json.dumps(body, separators=(',', ':'))
         headers = self._headers(method, path, body_str)
-        print(f"[DEBUG] headers: {headers}")
+        # print(f"[DEBUG] headers: {headers}")
+        print("[DEBUG] API call to OKX")
         url = self.base_url + path
 
         # FIX: Force HTTPX to utilize IPv4 loopbacks only
@@ -51,7 +52,7 @@ class OKXClient:
             if method == "GET":
                 resp = client.get(url, headers=headers)
             else:
-                resp = client.post(url, headers=headers, content=body_str)
+                 resp = client.post(url, headers=headers, content=body_str)
 
         if resp.status_code != 200:
             print(f"[OKX ERROR] {resp.status_code}: {resp.text}")
