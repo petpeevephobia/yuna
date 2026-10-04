@@ -46,16 +46,22 @@ async def bot_loop():
             except Exception as e:
                 print(f"[bot_loop] buy order failed: {e}")
 
-        if sell_trigger and price >= sell_trigger and not _fired["sell"]:
-            try:
-                client.place_limit_order(inst_id, "sell", sell_trigger, order_size)
-                append_trade({
-                    "timestamp": time.time(), "side": "sell",
-                    "price": sell_trigger, "size": order_size,
-                })
-                _fired["sell"] = True
-                print(f"[bot_loop] SELL order placed @ {sell_trigger}")
-            except Exception as e:
-                print(f"[bot_loop] sell order failed: {e}")
+            if sell_trigger and price >= sell_trigger and not _fired["sell"]:
+                try:
+                    # FIX: Convert your USDT order size into base currency (BTC) units for the sell order
+                    btc_qty = round(float(order_size) / sell_trigger, 6)
+                    
+                    # Pass str(btc_qty) instead of order_size
+                    client.place_limit_order(inst_id, "sell", sell_trigger, str(btc_qty))
+                    
+                    append_trade({
+                        "timestamp": time.time(), "side": "sell",
+                        "price": sell_trigger, "size": order_size,
+                    })
+                    _fired["sell"] = True
+                    print(f"[bot_loop] SELL order placed @ {sell_trigger}")
+                except Exception as e:
+                    print(f"[bot_loop] sell order failed: {e}")
+
 
         await asyncio.sleep(POLL_INTERVAL_SECONDS)

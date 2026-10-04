@@ -38,26 +38,39 @@ class OKXClient:
 
     def _request(self, method: str, path: str, body: dict | None = None):
         import json
-        body_str = "" if body is None else json.dumps(body)
+        
+        body_str = "" if body is None else json.dumps(body, separators=(',', ':'))
         headers = self._headers(method, path, body_str)
-        print(f"[DEBUG] headers: {headers}")  # <-- add this
+        print(f"[DEBUG] headers: {headers}")
         url = self.base_url + path
 
-        with httpx.Client(timeout=10) as client:
+        # FIX: Force HTTPX to utilize IPv4 loopbacks only
+        transport = httpx.HTTPTransport(local_address="0.0.0.0")
+
+        with httpx.Client(transport=transport, timeout=10) as client:
             if method == "GET":
                 resp = client.get(url, headers=headers)
             else:
                 resp = client.post(url, headers=headers, content=body_str)
 
         if resp.status_code != 200:
-            print(f"[OKX ERROR] {resp.status_code}: {resp.text}")  # <-- add this
+            print(f"[OKX ERROR] {resp.status_code}: {resp.text}")
         resp.raise_for_status()
         return resp.json()
+
 
     def get_ticker(self, inst_id: str) -> float:
         path = f"/api/v5/market/ticker?instId={inst_id}"
         data = self._request("GET", path)
-        return float(data["data"][0]["last"])
+        
+        # Robust parsing protection: 
+        # OKX v5 returns a dictionary containing a "data" key with an array inside.
+        if isinstance(data, dict) and "data" in data and len(data["data"]) > 0:
+            return float(data["data"][0]["last"])
+        
+        # Fallback case if the payload structure varies internally
+        raise ValueError(f"Unexpected ticker payload configuration format: {data}")
+
 
     def get_balance(self) -> dict:
         path = "/api/v5/account/balance"
