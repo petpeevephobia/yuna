@@ -2,11 +2,7 @@
 
 ## Why Yuna
 
-<<<<<<< HEAD
-Yuna is a personal, no-nonsense crypto trading bot built on top of the OKX API. The idea is simple: set a buy price and a sell price for an asset, define how much to trade, and let Yuna watch the market and place limit orders when your triggers are hit - without needing to babysit a chart all day.
-=======
 Yuna is a personal, no-nonsense crypto trading bot built on top of the OKX API. The idea is simple: set a buy price and a sell price for an asset, define how much to trade, and let Yuno watch the market and place limit orders when your triggers are hit - without needing to babysit a chart all day.
->>>>>>> 2e1d93ae243f2bfc6aecd218c10554e63227a258
 
 This MVP is deliberately narrow. No strategy engine, no backtesting, no multi-exchange abstraction. Just: watch price → hit trigger → place limit order → log it → repeat. Everything else comes later, once the core loop is proven reliable.
 
@@ -100,8 +96,8 @@ This MVP is deliberately narrow. No strategy engine, no backtesting, no multi-ex
 |  [ Sell Trigger Price: $66,000 ]     [ [ SAVE & APPLY ]           ]   |
 +-----------------------------------------------------------------------+
 |  OPEN ORDERS                                                          |
-|  - LIMIT BUY @ $62,000 (200 USDT)                                     |
-|  - LIMIT SELL @ $66,000 (0.05 BTC)                                    |
+|  - LIMIT BUY at $62,000 (200 USDT)                                     |
+|  - LIMIT SELL at $66,000 (0.05 BTC)                                    |
 +-----------------------------------------------------------------------+
 |  RECENT LOGS                                                          |
 |  [14:22:01] Filled: Buy 0.003 BTC at $62,100                          |
@@ -114,11 +110,7 @@ This MVP is deliberately narrow. No strategy engine, no backtesting, no multi-ex
 ## Project Structure (suggested)
 
 ```
-<<<<<<< HEAD
-Yuna/
-=======
 yuna/
->>>>>>> 2e1d93ae243f2bfc6aecd218c10554e63227a258
 ├── backend/
 │   ├── main.py            # FastAPI app entrypoint
 │   ├── okx_client.py      # OKX API wrapper (auth, price, balances, orders)
