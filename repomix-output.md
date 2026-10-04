@@ -99,96 +99,6 @@ class Settings(BaseSettings):
 settings = Settings()
 ````
 
-## File: backend/okx_client.py
-````python
-import base64
-import hmac
-import hashlib
-import time
-import httpx
-from config import settings
-# print(settings.okx_api_key)
-
-class OKXClient:
-    def __init__(self):
-        self.base_url = settings.okx_base_url
-        self.api_key = settings.okx_api_key
-        self.secret = settings.okx_api_secret
-        self.passphrase = settings.okx_api_passphrase
-        self.simulated = settings.okx_simulated
-
-    def _timestamp(self) -> str:
-        return time.strftime("%Y-%m-%dT%H:%M:%S.", time.gmtime()) + \
-            f"{int(time.time() * 1000) % 1000:03d}Z"
-
-    def _sign(self, timestamp: str, method: str, path: str, body: str = "") -> str:
-        message = f"{timestamp}{method}{path}{body}"
-        mac = hmac.new(self.secret.encode(), message.encode(), hashlib.sha256)
-        return base64.b64encode(mac.digest()).decode()
-
-    def _headers(self, method: str, path: str, body: str = "") -> dict:
-        ts = self._timestamp()
-        headers = {
-            "OK-ACCESS-KEY": self.api_key,
-            "OK-ACCESS-SIGN": self._sign(ts, method, path, body),
-            "OK-ACCESS-TIMESTAMP": ts,
-            "OK-ACCESS-PASSPHRASE": self.passphrase,
-            "Content-Type": "application/json",
-        }
-        if self.simulated:
-            headers["x-simulated-trading"] = "1"
-        return headers
-
-    def _request(self, method: str, path: str, body: dict | None = None):
-        import json
-        body_str = "" if body is None else json.dumps(body)
-        headers = self._headers(method, path, body_str)
-        print(f"[DEBUG] headers: {headers}")  # <-- add this
-        url = self.base_url + path
-
-        with httpx.Client(timeout=10) as client:
-            if method == "GET":
-                resp = client.get(url, headers=headers)
-            else:
-                resp = client.post(url, headers=headers, content=body_str)
-
-        if resp.status_code != 200:
-            print(f"[OKX ERROR] {resp.status_code}: {resp.text}")  # <-- add this
-        resp.raise_for_status()
-        return resp.json()
-
-    def get_ticker(self, inst_id: str) -> float:
-        path = f"/api/v5/market/ticker?instId={inst_id}"
-        data = self._request("GET", path)
-        return float(data["data"][0]["last"])
-
-    def get_balance(self) -> dict:
-        path = "/api/v5/account/balance"
-        data = self._request("GET", path)
-        details = data["data"][0]["details"]
-        return {d["ccy"]: float(d["availBal"]) for d in details}
-
-    def place_limit_order(self, inst_id: str, side: str, price: float, size: str) -> dict:
-        path = "/api/v5/trade/order"
-        body = {
-            "instId": inst_id,
-            "tdMode": "cash",
-            "side": side,          # "buy" or "sell"
-            "ordType": "limit",
-            "px": str(price),
-            "sz": size,
-        }
-        return self._request("POST", path, body)
-
-    def get_pending_orders(self, inst_id: str) -> list:
-        path = f"/api/v5/trade/orders-pending?instId={inst_id}"
-        return self._request("GET", path)["data"]
-
-    def get_fills(self, inst_id: str) -> list:
-        path = f"/api/v5/trade/fills?instId={inst_id}"
-        return self._request("GET", path)["data"]
-````
-
 ## File: backend/requirements.txt
 ````
 annotated-doc==0.0.5
@@ -317,114 +227,6 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
-  );
-}
-````
-
-## File: frontend/app/page.tsx
-````typescript
-"use client";
-
-import { useEffect, useState } from "react";
-import {
-  getStatus, postSettings, startBot, pauseBot,
-  getMarketPrice, getBalances, getPendingOrders, getTradeHistory,
-} from "@/lib/api";
-
-export default function Dashboard() {
-  const [status, setStatus] = useState<any>(null);
-  const [price, setPrice] = useState<number | null>(null);
-  const [balances, setBalances] = useState<any>(null);
-  const [orders, setOrders] = useState<any[]>([]);
-  const [history, setHistory] = useState<any[]>([]);
-
-  const [buyTrigger, setBuyTrigger] = useState("");
-  const [sellTrigger, setSellTrigger] = useState("");
-  const [orderSize, setOrderSize] = useState("");
-
-  const instId = "BTC-USDT";
-
-  async function refresh() {
-    setStatus(await getStatus());
-    setPrice((await getMarketPrice(instId)).price);
-    setBalances(await getBalances());
-    setOrders(await getPendingOrders(instId));
-    setHistory(await getTradeHistory());
-  }
-
-  useEffect(() => {
-    refresh();
-    const interval = setInterval(refresh, 5000);
-    return () => clearInterval(interval);
-  }, []);
-
-  async function saveSettings() {
-    await postSettings({
-      inst_id: instId,
-      buy_trigger: parseFloat(buyTrigger),
-      sell_trigger: parseFloat(sellTrigger),
-      order_size: orderSize,
-    });
-    refresh();
-  }
-
-  async function toggleBot() {
-    if (status?.bot_status === "active") await pauseBot();
-    else await startBot();
-    refresh();
-  }
-
-  const statusColor = {
-    active: "bg-green-500",
-    paused: "bg-yellow-500",
-    error: "bg-red-500",
-  }[status?.bot_status ?? "paused"];
-
-  return (
-    <main className="p-6 max-w-2xl mx-auto space-y-6 font-mono">
-      <div className="flex justify-between items-center border p-4 rounded">
-        <span className={`px-3 py-1 rounded text-white ${statusColor}`}>
-          BOT STATUS: {status?.bot_status?.toUpperCase()}
-        </span>
-        <button onClick={toggleBot} className="border px-4 py-2 rounded bg-red-100">
-          {status?.bot_status === "active" ? "PAUSE BOT / KILL SWITCH" : "START BOT"}
-        </button>
-      </div>
-
-      <div className="border p-4 rounded">
-        <p>MARKET: {instId}   CURRENT PRICE: ${price}</p>
-        <p>BALANCES: {balances && Object.entries(balances).map(([k, v]) => `${v} ${k}`).join("  |  ")}</p>
-      </div>
-
-      <div className="border p-4 rounded space-y-2">
-        <p className="font-bold">STRATEGY SETTINGS</p>
-        <input placeholder="Buy Trigger Price" value={buyTrigger}
-          onChange={e => setBuyTrigger(e.target.value)} className="border p-1 w-full" />
-        <input placeholder="Sell Trigger Price" value={sellTrigger}
-          onChange={e => setSellTrigger(e.target.value)} className="border p-1 w-full" />
-        <input placeholder="Order Size" value={orderSize}
-          onChange={e => setOrderSize(e.target.value)} className="border p-1 w-full" />
-        <button onClick={saveSettings} className="border px-4 py-1 rounded bg-blue-100">
-          SAVE & APPLY
-        </button>
-      </div>
-
-      <div className="border p-4 rounded">
-        <p className="font-bold">OPEN ORDERS</p>
-        {orders.map((o, i) => (
-          <p key={i}>{o.side.toUpperCase()} @ {o.px} ({o.sz})</p>
-        ))}
-      </div>
-
-      <div className="border p-4 rounded max-h-48 overflow-y-auto">
-        <p className="font-bold">RECENT LOGS</p>
-        {history.slice().reverse().map((t, i) => (
-          <p key={i}>
-            [{new Date(t.timestamp * 1000).toLocaleTimeString()}] {t.side.toUpperCase()} {t.size} @ {t.price}
-          </p>
-        ))}
-      </div>
-    </main>
   );
 }
 ````
@@ -721,239 +523,6 @@ Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/bui
 }
 ````
 
-## File: .gitignore
-````
-.env
-venv/
-__pycache__/
-````
-
-## File: README.md
-````markdown
-# Yuna
-
-## Why Yuna
-
-Yuna is a personal, no-nonsense crypto trading bot built on top of the OKX API. The idea is simple: set a buy price and a sell price for an asset, define how much to trade, and let Yuna watch the market and place limit orders when your triggers are hit - without needing to babysit a chart all day.
-
-This MVP is deliberately narrow. No strategy engine, no backtesting, no multi-exchange abstraction. Just: watch price → hit trigger → place limit order → log it → repeat. Everything else comes later, once the core loop is proven reliable.
-
-## MVP Scope
-
-**In scope:**
-
-- Connect to OKX via API key/secret
-- Set a target buy price and target sell price for one trading pair at a time
-- Set an order size (in quote currency, e.g. USDT)
-- Place a limit order automatically when the market price crosses a trigger
-- Start/Pause the bot (kill switch)
-- View current price, balances, open orders, and trade history in a simple UI
-
-**Out of scope (for now):**
-
-- Multiple simultaneous pairs/strategies
-- Trailing stops, DCA, grid trading, or any advanced order logic
-- Multi-exchange support
-- Backtesting or historical simulation
-- Notifications (email/Telegram/etc.) - now just logs
-
-
-
-## Tech Stack
-
-- **Python** - the bot engine. Owns all OKX API interaction, the price-check loop, and trigger logic. This is the core of Yuna.
-- **Next.js** - the UI. A single dashboard page that talks to the Python backend over a simple REST API (and optionally a WebSocket/SSE for live price updates).
-- **Go** - not used in the MVP. Held in reserve only if a specific piece later needs lower latency or concurrency than Python comfortably gives (e.g. a dedicated price-feed service). No Go code until there's a concrete reason for it.
-- **Docker** - not used in the MVP. Local dev runs the Python backend and Next.js frontend directly. Containerization gets added only if/when deployment (e.g. running Yuna on a VPS 24/7) makes it worthwhile.
-
-
-
-## Architecture Overview
-
-```
-+-------------------+         REST/WS         +----------------------+
-|   Next.js UI      | <---------------------> |   Python Bot Engine  |
-|  (dashboard)      |                          |  (FastAPI or Flask) |
-+-------------------+                          +----------------------+
-                                                        |
-                                                        | REST
-                                                        v
-                                                +----------------------+
-                                                |     OKX API          |
-                                                +----------------------+
-```
-
-- The Python backend runs a simple polling loop (every N seconds) that fetches the current market price from OKX, checks it against the stored buy/sell triggers, and fires a limit order via OKX's API when a trigger is hit.
-- Settings (API keys, triggers, order size, bot status) are read/written through the same backend and persisted locally - a single SQLite file or even a flat JSON file is enough for the MVP. No need for a full database yet.
-- Trade history and logs are appended to the same local store and served to the UI on request.
-- The Next.js frontend is a thin client: it renders state, sends config changes (triggers, order size, start/pause), and polls or subscribes for updates. No trading logic lives in the frontend.
-
-
-
-## UI Spec
-
-
-
-### 1. Control Panel (Inputs)
-
-- API key / secret fields (stored securely, never rendered back in full)
-- Target Buy Price / Target Sell Price inputs
-- Order Size input (quote currency amount, e.g. USDT)
-- Start/Pause ("Kill Switch") toggle - one click halts all automated trading
-
-
-
-### 2. Status & Monitoring
-
-- Bot status badge: Active (green) / Paused (yellow) / Disconnected/Error (red)
-- Live current market price for the selected pair
-- Current balances (base asset + quote asset, e.g. BTC / USDT)
-
-
-
-### 3. Activity Tracking
-
-- Pending Orders table - open orders currently sitting on OKX
-- Trade History log - scrollable list of filled trades (timestamp, side, price, amount)
-
-```
-+-----------------------------------------------------------------------+
-|  [ BOT STATUS: ACTIVE ]                      [ PAUSE BOT / KILL SWITCH] |
-+-----------------------------------------------------------------------+
-|  MARKET: BTC/USDT                            CURRENT PRICE: $64,250   |
-|  BALANCES: 0.12 BTC  |  2,500 USDT                                    |
-+-----------------------------------------------------------------------+
-|  STRATEGY SETTINGS                                                    |
-|  [ Buy Trigger Price: $62,000 ]      [ Order Size: 200 USDT       ]   |
-|  [ Sell Trigger Price: $66,000 ]     [ [ SAVE & APPLY ]           ]   |
-+-----------------------------------------------------------------------+
-|  OPEN ORDERS                                                          |
-|  - LIMIT BUY @ $62,000 (200 USDT)                                     |
-|  - LIMIT SELL @ $66,000 (0.05 BTC)                                    |
-+-----------------------------------------------------------------------+
-|  RECENT LOGS                                                          |
-|  [14:22:01] Filled: Buy 0.003 BTC at $62,100                          |
-|  [14:00:00] Bot checked prices: No triggers hit.                      |
-+-----------------------------------------------------------------------+
-```
-
-
-
-## Project Structure (suggested)
-
-```
-Yuna/
-├── backend/
-│   ├── main.py            # FastAPI app entrypoint
-│   ├── okx_client.py      # OKX API wrapper (auth, price, balances, orders)
-│   ├── bot_loop.py        # Polling loop + trigger logic
-│   ├── store.py           # Local persistence (SQLite/JSON) for settings & history
-│   └── config.py          # Env vars, constants
-├── frontend/
-│   ├── app/                # Next.js app directory
-│   ├── components/         # Dashboard UI components
-│   └── lib/api.ts          # Client for talking to the Python backend
-└── README.md
-```
-
-
-
-## Getting Started (minimal)
-
-1. Add your OKX API key/secret (via the UI or a local `.env` - never commit these).
-2. Run the Python backend: `uvicorn backend.main:app --reload`
-3. Run the Next.js frontend: `npm run dev`
-4. Open the dashboard, set your buy/sell triggers and order size, hit Start.
-
-
-
-## Roadmap (post-MVP)
-
-- Notifications on fills (Telegram/email)
-- Multi-pair support
-- Dockerized deployment for always-on running
-- More order types (OCO, trailing)
-````
-
-## File: backend/bot_loop.py
-````python
-import asyncio
-import time
-from okx_client import OKXClient
-from store import load_state, set_bot_status, append_trade
-
-POLL_INTERVAL_SECONDS = 10
-client = OKXClient()
-
-# tracks whether each trigger has already fired, so we don't spam orders
-_fired = {"buy": False, "sell": False}
-
-async def bot_loop():
-    while True:
-        state = load_state()
-        if state["bot_status"] != "active":
-            await asyncio.sleep(POLL_INTERVAL_SECONDS)
-            continue
-
-        settings = state["settings"]
-        inst_id = settings["inst_id"]
-        buy_trigger = settings.get("buy_trigger")
-        sell_trigger = settings.get("sell_trigger")
-        order_size = settings.get("order_size")
-
-        try:
-            price = client.get_ticker(inst_id)
-            print(f"[bot_loop] checked {inst_id} @ {price} (buy_trigger={buy_trigger}, sell_trigger={sell_trigger})")
-        except Exception as e:
-            print(f"[bot_loop] price fetch failed: {e}")
-            set_bot_status("error")
-            await asyncio.sleep(POLL_INTERVAL_SECONDS)
-            continue
-
-        if buy_trigger and price <= buy_trigger and not _fired["buy"]:
-            try:
-                # order_size is entered by the user in USDT, but OKX spot limit
-                # orders require size in base currency (BTC) — convert here.
-                btc_qty = round(float(order_size) / buy_trigger, 6)
-                client.place_limit_order(inst_id, "buy", buy_trigger, str(btc_qty))
-                append_trade({
-                    "timestamp": time.time(), "side": "buy",
-                    "price": buy_trigger, "size": order_size,
-                })
-                _fired["buy"] = True
-                print(f"[bot_loop] BUY order placed @ {buy_trigger}")
-            except Exception as e:
-                print(f"[bot_loop] buy order failed: {e}")
-
-        if sell_trigger and price >= sell_trigger and not _fired["sell"]:
-            try:
-                client.place_limit_order(inst_id, "sell", sell_trigger, order_size)
-                append_trade({
-                    "timestamp": time.time(), "side": "sell",
-                    "price": sell_trigger, "size": order_size,
-                })
-                _fired["sell"] = True
-                print(f"[bot_loop] SELL order placed @ {sell_trigger}")
-            except Exception as e:
-                print(f"[bot_loop] sell order failed: {e}")
-
-        await asyncio.sleep(POLL_INTERVAL_SECONDS)
-````
-
-## File: backend/data.json
-````json
-{
-  "settings": {
-    "inst_id": "BTC-USDT",
-    "buy_trigger": 84640.0,
-    "sell_trigger": 999999.0,
-    "order_size": "10"
-  },
-  "bot_status": "active",
-  "trade_history": []
-}
-````
-
 ## File: backend/main.py
 ````python
 import asyncio
@@ -1048,4 +617,765 @@ from config import settings
 print(f"KEY: [{settings.okx_api_key}]")
 # print(f"SECRET LEN: {len(settings.okx_api_secret)}")
 # print(f"PASSPHRASE: [{settings.okx_api_passphrase}]")
+````
+
+## File: .gitignore
+````
+.env
+venv/
+__pycache__/
+````
+
+## File: backend/okx_client.py
+````python
+import base64
+import hmac
+import hashlib
+import time
+import httpx
+from config import settings
+# print(settings.okx_api_key)
+
+class OKXClient:
+    def __init__(self):
+        self.base_url = settings.okx_base_url
+        self.api_key = settings.okx_api_key
+        self.secret = settings.okx_api_secret
+        self.passphrase = settings.okx_api_passphrase
+        self.simulated = settings.okx_simulated
+
+    def _timestamp(self) -> str:
+        return time.strftime("%Y-%m-%dT%H:%M:%S.", time.gmtime()) + \
+            f"{int(time.time() * 1000) % 1000:03d}Z"
+
+    def _sign(self, timestamp: str, method: str, path: str, body: str = "") -> str:
+        message = f"{timestamp}{method}{path}{body}"
+        mac = hmac.new(self.secret.encode(), message.encode(), hashlib.sha256)
+        return base64.b64encode(mac.digest()).decode()
+
+    def _headers(self, method: str, path: str, body: str = "") -> dict:
+        ts = self._timestamp()
+        headers = {
+            "OK-ACCESS-KEY": self.api_key,
+            "OK-ACCESS-SIGN": self._sign(ts, method, path, body),
+            "OK-ACCESS-TIMESTAMP": ts,
+            "OK-ACCESS-PASSPHRASE": self.passphrase,
+            "Content-Type": "application/json",
+        }
+        if self.simulated:
+            headers["x-simulated-trading"] = "1"
+        return headers
+
+    def _request(self, method: str, path: str, body: dict | None = None):
+        import json
+        
+        body_str = "" if body is None else json.dumps(body, separators=(',', ':'))
+        headers = self._headers(method, path, body_str)
+        # print(f"[DEBUG] headers: {headers}")
+        print("[DEBUG] API call to OKX")
+        url = self.base_url + path
+
+        # FIX: Force HTTPX to utilize IPv4 loopbacks only
+        transport = httpx.HTTPTransport(local_address="0.0.0.0")
+
+        with httpx.Client(transport=transport, timeout=10) as client:
+            if method == "GET":
+                resp = client.get(url, headers=headers)
+            else:
+                 resp = client.post(url, headers=headers, content=body_str)
+
+        if resp.status_code != 200:
+            print(f"[OKX ERROR] {resp.status_code}: {resp.text}")
+        resp.raise_for_status()
+        return resp.json()
+
+
+    def get_ticker(self, inst_id: str) -> float:
+        path = f"/api/v5/market/ticker?instId={inst_id}"
+        data = self._request("GET", path)
+        
+        # Robust parsing protection: 
+        # OKX v5 returns a dictionary containing a "data" key with an array inside.
+        if isinstance(data, dict) and "data" in data and len(data["data"]) > 0:
+            return float(data["data"][0]["last"])
+        
+        # Fallback case if the payload structure varies internally
+        raise ValueError(f"Unexpected ticker payload configuration format: {data}")
+
+
+    def get_balance(self) -> dict:
+        path = "/api/v5/account/balance"
+        data = self._request("GET", path)
+        details = data["data"][0]["details"]
+        return {d["ccy"]: float(d["availBal"]) for d in details}
+
+    def place_limit_order(self, inst_id: str, side: str, price: float, size: str) -> dict:
+        path = "/api/v5/trade/order"
+        body = {
+            "instId": inst_id,
+            "tdMode": "cash",
+            "side": side,          # "buy" or "sell"
+            "ordType": "limit",
+            "px": str(price),
+            "sz": size,
+        }
+        return self._request("POST", path, body)
+
+    def get_pending_orders(self, inst_id: str) -> list:
+        path = f"/api/v5/trade/orders-pending?instId={inst_id}"
+        return self._request("GET", path)["data"]
+
+    def get_fills(self, inst_id: str) -> list:
+        path = f"/api/v5/trade/fills?instId={inst_id}"
+        return self._request("GET", path)["data"]
+````
+
+## File: frontend/app/page.tsx
+````typescript
+"use client";
+
+import { useEffect, useState } from "react";
+import {
+  getStatus, postSettings, startBot, pauseBot,
+  getMarketPrice, getBalances, getPendingOrders, getTradeHistory,
+} from "@/lib/api";
+
+export default function Dashboard() {
+  const [status, setStatus] = useState<any>(null);
+  const [price, setPrice] = useState<number | null>(null);
+  const [balances, setBalances] = useState<any>(null);
+  const [orders, setOrders] = useState<any[]>([]);
+  const [history, setHistory] = useState<any[]>([]);
+
+  const [buyTrigger, setBuyTrigger] = useState("");
+  const [sellTrigger, setSellTrigger] = useState("");
+  const [orderSize, setOrderSize] = useState("");
+
+  const instId = "BTC-USDT";
+
+  async function refresh() {
+    setStatus(await getStatus());
+    setPrice((await getMarketPrice(instId)).price);
+    setBalances(await getBalances());
+    setOrders(await getPendingOrders(instId));
+    setHistory(await getTradeHistory());
+  }
+
+  useEffect(() => {
+    refresh();
+    const interval = setInterval(refresh, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  async function saveSettings() {
+    await postSettings({
+      inst_id: instId,
+      buy_trigger: parseFloat(buyTrigger),
+      sell_trigger: parseFloat(sellTrigger),
+      order_size: orderSize,
+    });
+    refresh();
+  }
+
+  async function toggleBot() {
+    if (status?.bot_status === "active") await pauseBot();
+    else await startBot();
+    refresh();
+  }
+
+  const statusColor = {
+    active: "bg-green-500",
+    paused: "bg-yellow-500",
+    error: "bg-red-500",
+  }[status?.bot_status ?? "paused"];
+
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
+  const calculatePnL = () => {
+    if (!history || history.length === 0) return { netUsdt: 0, completedCycles: 0 };
+
+    let totalSpent = 0;
+    let totalReceived = 0;
+    let buysCount = 0;
+    let sellsCount = 0;
+
+    // 1. First, scan through and find out what the active allocation size in BTC is
+    let lastBuyBtcVolume = 0.000586; // Fallback to your active 50 USDT size
+    
+    history.forEach((trade: any) => {
+      if (trade.side === "buy") {
+        const usdtValue = parseFloat(trade.size);
+        if (!isNaN(usdtValue)) {
+          totalSpent += usdtValue;
+          buysCount++;
+        }
+        
+        // Dynamically extract the exact BTC volume from between the parentheses "(0.000586 BTC)"
+        const btcMatch = trade.size.match(/\(([^)]+)\)/);
+        if (btcMatch && btcMatch[1]) {
+          lastBuyBtcVolume = parseFloat(btcMatch[1]);
+        }
+      } else if (trade.side === "sell") {
+        const btcValue = parseFloat(trade.size);
+        const executePrice = parseFloat(trade.price);
+        
+        if (!isNaN(btcValue) && !isNaN(executePrice)) {
+          // If the bot swept your entire 1 BTC demo account deposit bucket,
+          // isolate just the portion that was purchased for the strategy trade
+          if (btcValue > 0.5) {
+            totalReceived += (lastBuyBtcVolume * executePrice);
+          } else {
+            totalReceived += (btcValue * executePrice);
+          }
+          sellsCount++;
+        }
+      }
+    });
+
+    const completedCycles = Math.min(buysCount, sellsCount);
+    const netUsdt = totalReceived - totalSpent;
+
+    return { netUsdt, completedCycles };
+  };
+
+
+
+  // 1. Establish the current real-time exchange baseline parameter
+  const USDT_TO_USD_RATE = 0.9998; 
+
+  const pnl = calculatePnL();
+  
+  // 2. Compute the precise USD equivalent value
+  const netUsdEquivalent = pnl.netUsdt * USDT_TO_USD_RATE;
+  
+  
+
+  return (
+    <main className="min-h-screen bg-zinc-950 text-zinc-100 font-mono [color-scheme:dark]">
+      <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 p-6">
+  
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-stretch">
+  
+          {/* LEFT COLUMN */}
+          <div className="flex min-w-0 flex-col gap-6 md:col-span-3">
+  
+            {/* BOT STATUS BANNER */}
+            <div className="flex justify-between items-center rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 backdrop-blur">
+              <span className={`px-3 py-1 rounded-full text-xs font-semibold tracking-widest text-white ${statusColor}`}>
+                BOT STATUS: {status?.bot_status?.toUpperCase()}
+              </span>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setSettingsOpen(true)}
+                  className="rounded-lg border border-zinc-800 px-4 py-2 text-xs font-semibold tracking-wider text-zinc-400 transition-colors hover:bg-zinc-500/20 cursor-pointer"
+                >
+                  ⚙
+                </button>
+                <button
+                  onClick={toggleBot}
+                  className={`rounded-lg border px-4 py-2 text-xs font-semibold tracking-wider transition-colors cursor-pointer ${
+                    status?.bot_status === "active"
+                      ? "border-rose-500/40 bg-rose-500/10 text-rose-300 hover:bg-rose-500/20"
+                      : "border-emerald-500/40 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20"
+                  }`}
+                >
+                  {status?.bot_status === "active" ? "PAUSE BOT" : "START BOT"}
+                </button>
+              </div>
+            </div>
+  
+            {/* ACTIVE STRATEGY & PERFORMANCE PANEL */}
+            <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5 space-y-5">
+              <div>
+                <p className="text-xs font-semibold tracking-widest text-zinc-300">
+                  🌐 ACTIVE TRADING STRATEGY
+                </p>
+                <div className="grid grid-cols-3 gap-3 mt-3">
+                  <div className="rounded-lg border border-zinc-800 bg-zinc-950/70 p-3">
+                    <span className="block text-[10px] tracking-widest text-zinc-500">BUY TRIGGER</span>
+                    <span className="mt-1 block text-base font-bold text-rose-400">
+                      {status?.settings?.buy_trigger ? `$${status.settings.buy_trigger}` : "NOT SET"}
+                    </span>
+                  </div>
+                  <div className="rounded-lg border border-zinc-800 bg-zinc-950/70 p-3">
+                    <span className="block text-[10px] tracking-widest text-zinc-500">SELL TRIGGER</span>
+                    <span className="mt-1 block text-base font-bold text-emerald-400">
+                      {status?.settings?.sell_trigger ? `$${status.settings.sell_trigger}` : "NOT SET"}
+                    </span>
+                  </div>
+                  <div className="rounded-lg border border-zinc-800 bg-zinc-950/70 p-3">
+                    <span className="block text-[10px] tracking-widest text-zinc-500">ALLOCATION SIZE</span>
+                    <span className="mt-1 block text-base font-bold text-zinc-100">
+                      {status?.settings?.order_size ? `${status.settings.order_size} USDT` : "NOT SET"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+  
+              <div className="border-t border-zinc-800 pt-4">
+                <p className="text-xs font-semibold tracking-widest text-zinc-300">
+                  📊 PERFORMANCE & LOG TRACKER
+                </p>
+                <div className="grid grid-cols-2 gap-3 mt-3">
+                  <div className="rounded-lg border border-zinc-800 bg-zinc-950/70 p-3">
+                    <span className="block text-[10px] tracking-widest text-zinc-500">COMPLETED PING-PONG CYCLES</span>
+                    <span className="mt-1 block text-lg font-bold text-zinc-100">{pnl.completedCycles} trades</span>
+                  </div>
+                  <div className="rounded-lg border border-zinc-800 bg-zinc-950/70 p-3 flex flex-col justify-between">
+                    <div>
+                      <span className="block text-[10px] tracking-widest text-zinc-500">NET REALIZED PROFIT / LOSS</span>
+                      <span className={`mt-1 block text-lg font-bold leading-none ${pnl.netUsdt >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
+                        {pnl.netUsdt >= 0 ? `+$${pnl.netUsdt.toFixed(4)}` : `-$${Math.abs(pnl.netUsdt).toFixed(4)}`} USDT
+                      </span>
+                    </div>
+                    <div className="mt-2 border-t border-zinc-800 pt-1 text-[11px] tracking-tight text-zinc-500">
+                      ≈ {netUsdEquivalent >= 0 ? `+$${netUsdEquivalent.toFixed(4)}` : `-$${Math.abs(netUsdEquivalent).toFixed(4)}`} USD
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+  
+            {/* MARKET + PRICE HERO CARDS */}
+            <div className="grid min-h-[180px] flex-1 grid-cols-1 gap-4 sm:grid-cols-2">
+
+            {/* CURRENT TICKER PRICE */}
+            <div className="flex flex-col justify-center rounded-2xl border border-emerald-500/30 bg-gradient-to-br from-emerald-500/10 via-zinc-900 to-zinc-900 p-6 shadow-[0_0_40px_-12px_rgba(16,185,129,0.45)]">
+              <span className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.25em] text-emerald-300/70">
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+                </span>
+                CURRENT TICKER PRICE
+              </span>
+              <span className="mt-3 block text-4xl font-extrabold tabular-nums tracking-tight text-emerald-300 md:text-5xl">
+                ${price}
+              </span>
+            </div>
+
+            {/* MARKET */}
+            <div className="flex flex-col justify-center rounded-2xl border border-sky-500/30 bg-gradient-to-br from-sky-500/10 via-zinc-900 to-zinc-900 p-6 shadow-[0_0_40px_-12px_rgba(14,165,233,0.45)]">
+              <span className="block text-[11px] font-semibold tracking-[0.25em] text-sky-300/70">
+                MARKET
+              </span>
+              <span className="mt-3 block text-4xl font-extrabold tracking-tight text-white md:text-5xl">
+                {instId}
+              </span>
+            </div>
+
+            </div>
+  
+          </div>
+  
+          {/* RIGHT COLUMN: BALANCES */}
+          <div className="md:col-span-1 h-full min-h-[350px] rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 space-y-4">
+            <p className="border-b border-zinc-800 pb-2 text-xs font-semibold tracking-widest text-zinc-300">
+              🧮 ACCOUNT BALANCES
+            </p>
+            <div className="flex flex-col gap-3">
+              {balances && Object.entries(balances).map(([asset, balanceValue]: [string, any]) => (
+                <div key={asset} className="flex flex-col justify-between rounded-lg border border-zinc-800 bg-zinc-950/70 p-3">
+                  <span className="block text-[10px] font-bold tracking-widest text-zinc-500">{asset}</span>
+                  <span className="mt-1 text-lg font-bold tracking-tight text-zinc-100">
+                    {typeof balanceValue === "number"
+                      ? balanceValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })
+                      : balanceValue}
+                  </span>
+                </div>
+              ))}
+              {!balances && (
+                <p className="text-xs italic text-zinc-600">Streaming wallet data parameters...</p>
+              )}
+            </div>
+          </div>
+  
+        </div>
+  
+        {/* FOOTER: TABLES */}
+        <div className="grid grid-cols-1 gap-6">
+          <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
+            <p className="mb-2 text-xs font-semibold tracking-widest text-zinc-300">OPEN ORDERS</p>
+            {orders.length === 0 && <p className="text-xs italic text-zinc-600">No open orders</p>}
+            {orders.map((o, i) => (
+              <p key={i} className="py-1 text-sm text-zinc-300">
+                <span className={o.side === "buy" ? "font-bold text-rose-400" : "font-bold text-emerald-400"}>
+                  {o.side.toUpperCase()}
+                </span>{" "}
+                @ {o.px} <span className="text-zinc-500">({o.sz})</span>
+              </p>
+            ))}
+          </div>
+  
+          <div className="max-h-48 overflow-y-auto rounded-xl border border-zinc-800 bg-zinc-900/60 p-5 [scrollbar-color:#3f3f46_transparent]">
+            <p className="mb-2 text-xs font-semibold tracking-widest text-zinc-300">RECENT LOGS</p>
+            {history.length === 0 && <p className="text-xs italic text-zinc-600">No trades yet</p>}
+            {history.slice().reverse().map((t, i) => {
+              const d = new Date(t.timestamp * 1000);
+              return (
+                <p key={i} className="border-b border-zinc-800 py-1.5 text-sm last:border-0">
+                  <span className="text-zinc-500">
+                    [{d.toLocaleDateString("sv-SE")} {d.toLocaleTimeString()}]
+                  </span>{" "}
+                  <span className={t.side === "buy" ? "font-bold text-rose-400" : "font-bold text-emerald-400"}>
+                    {t.side.toUpperCase()}
+                  </span>{" "}
+                  <span className="text-zinc-300">@ ${t.price}</span>{" "}
+                  <span className="text-zinc-500">— {t.size}</span>
+                </p>
+              );
+            })}
+          </div>
+        </div>
+  
+      </div>
+  
+      {/* SETTINGS DRAWER */}
+      <div
+        onClick={() => setSettingsOpen(false)}
+        className={`fixed inset-0 z-40 bg-black/60 backdrop-blur-sm transition-opacity duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] ${
+          settingsOpen ? "opacity-100" : "pointer-events-none opacity-0"
+        }`}
+      />
+      <aside
+        aria-hidden={!settingsOpen}
+        className={`fixed left-0 top-0 z-50 h-full w-80 max-w-[85vw] border-r border-zinc-800 bg-zinc-900 p-6 shadow-2xl will-change-transform transition-[translate,visibility] duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none ${
+          settingsOpen ? "translate-x-0 visible" : "-translate-x-full invisible"
+        }`}
+      >
+        <div className="mb-5 flex items-center justify-between border-b border-zinc-800 pb-3">
+          <p className="text-xs font-semibold tracking-widest text-zinc-300">STRATEGY PARAMETER SETTINGS</p>
+          <button
+            onClick={() => setSettingsOpen(false)}
+            className="text-zinc-500 transition-colors hover:text-zinc-200 cursor-pointer"
+            aria-label="Close settings"
+          >
+            ✕
+          </button>
+        </div>
+  
+        <div className="space-y-3">
+          <input
+            placeholder="Buy Trigger Price"
+            value={buyTrigger}
+            onChange={e => setBuyTrigger(e.target.value)}
+            className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 outline-none transition-colors focus:border-rose-500/60"
+          />
+          <input
+            placeholder="Sell Trigger Price"
+            value={sellTrigger}
+            onChange={e => setSellTrigger(e.target.value)}
+            className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 outline-none transition-colors focus:border-emerald-500/60"
+          />
+          <input
+            placeholder="Order Size"
+            value={orderSize}
+            onChange={e => setOrderSize(e.target.value)}
+            className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 outline-none transition-colors focus:border-sky-500/60"
+          />
+          <button
+            onClick={async () => {
+              await saveSettings();
+              setSettingsOpen(false);
+            }}
+            className="w-full rounded-lg border border-sky-500/40 bg-sky-500/10 px-4 py-2 text-xs font-semibold tracking-wider text-sky-300 transition-colors hover:bg-sky-500/20 cursor-pointer"
+          >
+            SAVE & APPLY
+          </button>
+        </div>
+      </aside>
+    </main>
+  );
+
+}
+````
+
+## File: backend/data.json
+````json
+{
+  "settings": {
+    "inst_id": "BTC-USDT",
+    "buy_trigger": 85350.0,
+    "sell_trigger": 85400.0,
+    "order_size": "50"
+  },
+  "bot_status": "paused",
+  "trade_history": [
+    {
+      "timestamp": 1791136425.3949761,
+      "side": "sell",
+      "price": 85420.4,
+      "size": "1.00035 BTC",
+      "status_msg": "FULFILLED ON 2026-10-04 19:53:45"
+    },
+    {
+      "timestamp": 1791136436.313782,
+      "side": "buy",
+      "price": 85350.0,
+      "size": "50 USDT (0.000586 BTC)",
+      "status_msg": "FULFILLED ON 2026-10-04 19:53:56"
+    },
+    {
+      "timestamp": 1791137517.3660867,
+      "side": "sell",
+      "price": 85400.0,
+      "size": "1.000935 BTC",
+      "status_msg": "FULFILLED ON 2026-10-04 20:11:57"
+    },
+    {
+      "timestamp": 1791137570.2786427,
+      "side": "buy",
+      "price": 85350.0,
+      "size": "50 USDT (0.000586 BTC)",
+      "status_msg": "FULFILLED ON 2026-10-04 20:12:50"
+    }
+  ]
+}
+````
+
+## File: README.md
+````markdown
+# Yuna
+
+## Why Yuna
+
+Yuna is a personal, no-nonsense crypto trading bot built on top of the OKX API. The idea is simple: set a buy price and a sell price for an asset, define how much to trade, and let Yuno watch the market and place limit orders when your triggers are hit - without needing to babysit a chart all day.
+
+This MVP is deliberately narrow. No strategy engine, no backtesting, no multi-exchange abstraction. Just: watch price → hit trigger → place limit order → log it → repeat. Everything else comes later, once the core loop is proven reliable.
+
+## MVP Scope
+
+**In scope:**
+
+- Connect to OKX via API key/secret
+- Set a target buy price and target sell price for one trading pair at a time
+- Set an order size (in quote currency, e.g. USDT)
+- Place a limit order automatically when the market price crosses a trigger
+- Start/Pause the bot (kill switch)
+- View current price, balances, open orders, and trade history in a simple UI
+
+**Out of scope (for now):**
+
+- Multiple simultaneous pairs/strategies
+- Trailing stops, DCA, grid trading, or any advanced order logic
+- Multi-exchange support
+- Backtesting or historical simulation
+- Notifications (email/Telegram/etc.) - now just logs
+
+
+
+## Tech Stack
+
+- **Python** - the bot engine. Owns all OKX API interaction, the price-check loop, and trigger logic. This is the core of Yuna.
+- **Next.js** - the UI. A single dashboard page that talks to the Python backend over a simple REST API (and optionally a WebSocket/SSE for live price updates).
+- **Go** - not used in the MVP. Held in reserve only if a specific piece later needs lower latency or concurrency than Python comfortably gives (e.g. a dedicated price-feed service). No Go code until there's a concrete reason for it.
+- **Docker** - not used in the MVP. Local dev runs the Python backend and Next.js frontend directly. Containerization gets added only if/when deployment (e.g. running Yuna on a VPS 24/7) makes it worthwhile.
+
+
+
+## Architecture Overview
+
+```
++-------------------+         REST/WS         +----------------------+
+|   Next.js UI      | <---------------------> |   Python Bot Engine  |
+|  (dashboard)      |                          |  (FastAPI or Flask) |
++-------------------+                          +----------------------+
+                                                        |
+                                                        | REST
+                                                        v
+                                                +----------------------+
+                                                |     OKX API          |
+                                                +----------------------+
+```
+
+- The Python backend runs a simple polling loop (every N seconds) that fetches the current market price from OKX, checks it against the stored buy/sell triggers, and fires a limit order via OKX's API when a trigger is hit.
+- Settings (API keys, triggers, order size, bot status) are read/written through the same backend and persisted locally - a single SQLite file or even a flat JSON file is enough for the MVP. No need for a full database yet.
+- Trade history and logs are appended to the same local store and served to the UI on request.
+- The Next.js frontend is a thin client: it renders state, sends config changes (triggers, order size, start/pause), and polls or subscribes for updates. No trading logic lives in the frontend.
+
+
+
+## UI Spec
+
+
+
+### 1. Control Panel (Inputs)
+
+- API key / secret fields (stored securely, never rendered back in full)
+- Target Buy Price / Target Sell Price inputs
+- Order Size input (quote currency amount, e.g. USDT)
+- Start/Pause ("Kill Switch") toggle - one click halts all automated trading
+
+
+
+### 2. Status & Monitoring
+
+- Bot status badge: Active (green) / Paused (yellow) / Disconnected/Error (red)
+- Live current market price for the selected pair
+- Current balances (base asset + quote asset, e.g. BTC / USDT)
+
+
+
+### 3. Activity Tracking
+
+- Pending Orders table - open orders currently sitting on OKX
+- Trade History log - scrollable list of filled trades (timestamp, side, price, amount)
+
+```
++-----------------------------------------------------------------------+
+|  [ BOT STATUS: ACTIVE ]                      [ PAUSE BOT / KILL SWITCH] |
++-----------------------------------------------------------------------+
+|  MARKET: BTC/USDT                            CURRENT PRICE: $64,250   |
+|  BALANCES: 0.12 BTC  |  2,500 USDT                                    |
++-----------------------------------------------------------------------+
+|  STRATEGY SETTINGS                                                    |
+|  [ Buy Trigger Price: $62,000 ]      [ Order Size: 200 USDT       ]   |
+|  [ Sell Trigger Price: $66,000 ]     [ [ SAVE & APPLY ]           ]   |
++-----------------------------------------------------------------------+
+|  OPEN ORDERS                                                          |
+|  - LIMIT BUY at $62,000 (200 USDT)                                     |
+|  - LIMIT SELL at $66,000 (0.05 BTC)                                    |
++-----------------------------------------------------------------------+
+|  RECENT LOGS                                                          |
+|  [14:22:01] Filled: Buy 0.003 BTC at $62,100                          |
+|  [14:00:00] Bot checked prices: No triggers hit.                      |
++-----------------------------------------------------------------------+
+```
+
+
+
+## Project Structure (suggested)
+
+```
+yuna/
+├── backend/
+│   ├── main.py            # FastAPI app entrypoint
+│   ├── okx_client.py      # OKX API wrapper (auth, price, balances, orders)
+│   ├── bot_loop.py        # Polling loop + trigger logic
+│   ├── store.py           # Local persistence (SQLite/JSON) for settings & history
+│   └── config.py          # Env vars, constants
+├── frontend/
+│   ├── app/                # Next.js app directory
+│   ├── components/         # Dashboard UI components
+│   └── lib/api.ts          # Client for talking to the Python backend
+└── README.md
+```
+
+
+
+## Getting Started (minimal)
+
+1. Add your OKX API key/secret (via the UI or a local `.env` - never commit these).
+2. Go to `cd backend` and activate Python virtual environment: `venv\Scripts\activate`
+2. Run the Python backend: `uvicorn main:app --host 127.0.0.1 --port 8000 --reload`
+3. Go to `cd frontend` and run the Next.js frontend: `npm run dev`
+4. Open the dashboard at http://localhost:3000, set your buy/sell triggers and order size, hit Start.
+
+
+
+## Roadmap (post-MVP)
+
+- Notifications on fills (Telegram/email)
+- Multi-pair support
+- Dockerized deployment for always-on running
+- More order types (OCO, trailing)
+````
+
+## File: backend/bot_loop.py
+````python
+import asyncio
+import time
+from okx_client import OKXClient
+from store import load_state, set_bot_status, append_trade
+
+POLL_INTERVAL_SECONDS = 10
+client = OKXClient()
+
+# tracks whether each trigger has already fired, so we don't spam orders
+_fired = {"buy": False, "sell": False}
+
+async def bot_loop():
+    while True:
+        state = load_state()
+        if state["bot_status"] != "active":
+            await asyncio.sleep(POLL_INTERVAL_SECONDS)
+            continue
+
+        settings = state["settings"]
+        inst_id = settings["inst_id"]
+        buy_trigger = settings.get("buy_trigger")
+        sell_trigger = settings.get("sell_trigger")
+        order_size = settings.get("order_size")
+
+        try:
+            price = client.get_ticker(inst_id)
+            print(f"[bot_loop] checked {inst_id} @ {price} (buy_trigger={buy_trigger}, sell_trigger={sell_trigger})")
+        except Exception as e:
+            print(f"[bot_loop] price fetch failed: {e}")
+            set_bot_status("error")
+            await asyncio.sleep(POLL_INTERVAL_SECONDS)
+            continue
+
+
+        if buy_trigger and price <= buy_trigger and not _fired["buy"]:
+            try:
+                btc_qty = round(float(order_size) / buy_trigger, 6)
+                client.place_limit_order(inst_id, "buy", buy_trigger, str(btc_qty))
+                
+                # Create a formatted human-readable date & time string
+                fulfilled_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+                
+                # Append to trade history array (this feeds your UI log terminal)
+                append_trade({
+                    "timestamp": time.time(), 
+                    "side": "buy",
+                    "price": buy_trigger, 
+                    "size": f"{order_size} USDT ({btc_qty} BTC)",
+                    "status_msg": f"FULFILLED ON {fulfilled_time}" # <-- Explicit fulfillment clock
+                })
+                
+                _fired["buy"] = True
+                _fired["sell"] = False  # Reset sell flag so it can keep cycling
+                print(f"[bot_loop] BUY order placed @ {buy_trigger}")
+            except Exception as e:
+                print(f"[bot_loop] buy order failed: {e}")
+
+
+        if sell_trigger and price >= sell_trigger and not _fired["sell"]:
+            try:
+                # 1. Fetch your exact, live available BTC balance directly from the exchange
+                balances = client.get_balance()
+                available_btc = balances.get("BTC", 0.0)
+
+                if available_btc < 0.0001:
+                    print(f"[bot_loop] Sell skipped: Insufficient BTC balance ({available_btc})")
+                    continue
+
+                # 2. Sell your [ENTIRE] available BTC cache instead of back-calculating a fractional size
+                sell_size = str(round(available_btc, 6))
+                
+                # Place the limit sell order at the current market price rather than the trigger line
+                client.place_limit_order(inst_id, "sell", price, sell_size)
+                
+                # Update your tracking logs with the true executed asset values
+                fulfilled_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+                append_trade({
+                    "timestamp": time.time(), 
+                    "side": "sell",
+                    "price": price, 
+                    "size": f"{sell_size} BTC",
+                    "status_msg": f"FULFILLED ON {fulfilled_time}"
+                })
+                
+                _fired["sell"] = True
+                _fired["buy"] = False  # Reset buy flag for a clean continuous loop
+                print(f"[bot_loop] SELL order successfully executed for {sell_size} BTC")
+            except Exception as e:
+                print(f"[bot_loop] sell order failed at network layer: {e}")
+
+
+ 
+
+
+
+        await asyncio.sleep(POLL_INTERVAL_SECONDS)
 ````
