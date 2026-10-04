@@ -1,10 +1,39 @@
 {
   "settings": {
     "inst_id": "BTC-USDT",
-    "buy_trigger": 85280.0,
-    "sell_trigger": 999999.0,
-    "order_size": "10"
+    "buy_trigger": 85350.0,
+    "sell_trigger": 85400.0,
+    "order_size": "50"
   },
   "bot_status": "paused",
-  "trade_history": []
+  "trade_history": [
+    {
+      "timestamp": 1791136425.3949761,
+      "side": "sell",
+      "price": 85420.4,
+      "size": "1.00035 BTC",
+      "status_msg": "FULFILLED ON 2026-10-04 19:53:45"
+    },
+    {
+      "timestamp": 1791136436.313782,
+      "side": "buy",
+      "price": 85350.0,
+      "size": "50 USDT (0.000586 BTC)",
+      "status_msg": "FULFILLED ON 2026-10-04 19:53:56"
+    },
+    {
+      "timestamp": 1791137517.3660867,
+      "side": "sell",
+      "price": 85400.0,
+      "size": "1.000935 BTC",
+      "status_msg": "FULFILLED ON 2026-10-04 20:11:57"
+    },
+    {
+      "timestamp": 1791137570.2786427,
+      "side": "buy",
+      "price": 85350.0,
+      "size": "50 USDT (0.000586 BTC)",
+      "status_msg": "FULFILLED ON 2026-10-04 20:12:50"
+    }
+  ]
 }
