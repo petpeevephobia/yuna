@@ -96,5 +96,6 @@ class OKXClient:
         return self._request("GET", path)["data"]
 
     def get_fills(self, inst_id: str) -> list:
-        path = f"/api/v5/trade/fills?instId={inst_id}"
+        # fills-history covers ~3 months (plain /fills only the last 3 days); instType is required, max 100 rows
+        path = f"/api/v5/trade/fills-history?instType=SPOT&instId={inst_id}&limit=100"
         return self._request("GET", path)["data"]

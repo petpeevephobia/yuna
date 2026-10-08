@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import {
   getStatus, postSettings, startBot, pauseBot,
-  getMarketPrice, getBalances, getPendingOrders, getTradeHistory,
+  getMarketPrice, getBalances, getPendingOrders, getFilledOrders,
 } from "@/lib/api";
 
 export default function Dashboard() {
@@ -11,20 +11,23 @@ export default function Dashboard() {
   const [price, setPrice] = useState<number | null>(null);
   const [balances, setBalances] = useState<any>(null);
   const [orders, setOrders] = useState<any[]>([]);
-  const [history, setHistory] = useState<any[]>([]);
+  const [fills, setFills] = useState<any[]>([]);
 
   const [buyTrigger, setBuyTrigger] = useState("");
   const [sellTrigger, setSellTrigger] = useState("");
   const [orderSize, setOrderSize] = useState("");
 
   const instId = "BTC-USDT";
+  const baseCcy = instId.split("-")[0];
 
   async function refresh() {
     setStatus(await getStatus());
     setPrice((await getMarketPrice(instId)).price);
     setBalances(await getBalances());
-    setOrders(await getPendingOrders(instId));
-    setHistory(await getTradeHistory());
+    const open = await getPendingOrders(instId);
+    setOrders(Array.isArray(open) ? open : []);
+    const filled = await getFilledOrders(instId);
+    setFills(Array.isArray(filled) ? filled : []);
   }
 
   useEffect(() => {
@@ -57,51 +60,51 @@ export default function Dashboard() {
 
   const [settingsOpen, setSettingsOpen] = useState(false);
 
+  // Realized P&L from real OKX fills, FIFO-matched: every sell is matched against
+  // earlier buys. Sold quantity with no matching buy in the fill history (e.g. the
+  // demo account's starting BTC) has no cost basis, so it is left out.
   const calculatePnL = () => {
-    if (!history || history.length === 0) return { netUsdt: 0, completedCycles: 0 };
+    const [base, quote] = instId.split("-");
+    const ordered = fills.slice().sort((a: any, b: any) => Number(a.ts) - Number(b.ts));
 
-    let totalSpent = 0;
-    let totalReceived = 0;
-    let buysCount = 0;
-    let sellsCount = 0;
+    const lots: { qty: number; unitCost: number }[] = [];
+    const closedOrders = new Set<string>();
+    let netUsdt = 0;
 
-    // 1. First, scan through and find out what the active allocation size in BTC is
-    let lastBuyBtcVolume = 0.000586; // Fallback to your active 50 USDT size
-    
-    history.forEach((trade: any) => {
-      if (trade.side === "buy") {
-        const usdtValue = parseFloat(trade.size);
-        if (!isNaN(usdtValue)) {
-          totalSpent += usdtValue;
-          buysCount++;
+    ordered.forEach((f: any, i: number) => {
+      const px = parseFloat(f.fillPx);
+      const sz = parseFloat(f.fillSz);
+      const fee = parseFloat(f.fee) || 0; // OKX reports fees as negative numbers
+      if (isNaN(px) || isNaN(sz) || sz <= 0) return;
+      const feeBase = f.feeCcy === base ? fee : 0;
+      const feeQuote = f.feeCcy === quote ? fee : 0;
+
+      if (f.side === "buy") {
+        const qty = sz + feeBase; // a fee taken in BTC reduces what we actually hold
+        if (qty <= 0) return;
+        lots.push({ qty, unitCost: (px * sz - feeQuote) / qty });
+      } else if (f.side === "sell") {
+        const proceeds = px * sz + feeQuote;
+        let remaining = sz;
+        let matched = 0;
+        let matchedCost = 0;
+        while (remaining > 1e-12 && lots.length > 0) {
+          const lot = lots[0];
+          const take = Math.min(lot.qty, remaining);
+          matchedCost += take * lot.unitCost;
+          matched += take;
+          remaining -= take;
+          lot.qty -= take;
+          if (lot.qty <= 1e-12) lots.shift();
         }
-        
-        // Dynamically extract the exact BTC volume from between the parentheses "(0.000586 BTC)"
-        const btcMatch = trade.size.match(/\(([^)]+)\)/);
-        if (btcMatch && btcMatch[1]) {
-          lastBuyBtcVolume = parseFloat(btcMatch[1]);
-        }
-      } else if (trade.side === "sell") {
-        const btcValue = parseFloat(trade.size);
-        const executePrice = parseFloat(trade.price);
-        
-        if (!isNaN(btcValue) && !isNaN(executePrice)) {
-          // If the bot swept your entire 1 BTC demo account deposit bucket,
-          // isolate just the portion that was purchased for the strategy trade
-          if (btcValue > 0.5) {
-            totalReceived += (lastBuyBtcVolume * executePrice);
-          } else {
-            totalReceived += (btcValue * executePrice);
-          }
-          sellsCount++;
+        if (matched > 0) {
+          netUsdt += proceeds * (matched / sz) - matchedCost;
+          closedOrders.add(String(f.ordId ?? `fill-${i}`));
         }
       }
     });
 
-    const completedCycles = Math.min(buysCount, sellsCount);
-    const netUsdt = totalReceived - totalSpent;
-
-    return { netUsdt, completedCycles };
+    return { netUsdt, completedCycles: closedOrders.size };
   };
 
 
@@ -113,6 +116,13 @@ export default function Dashboard() {
   
   // 2. Compute the precise USD equivalent value
   const netUsdEquivalent = pnl.netUsdt * USDT_TO_USD_RATE;
+
+  // OKX timestamps are epoch milliseconds (as strings)
+  const fmtTs = (ms: string | number | undefined) => {
+    const d = new Date(Number(ms));
+    if (!ms || isNaN(d.getTime())) return "";
+    return `[${d.toLocaleDateString("sv-SE")} ${d.toLocaleTimeString()}]`;
+  };
   
   
 
@@ -257,40 +267,47 @@ export default function Dashboard() {
   
         </div>
   
-        {/* FOOTER: TABLES */}
-        <div className="grid grid-cols-1 gap-6">
-          <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
+        {/* FOOTER: ORDERS */}
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+
+          {/* OPEN ORDERS: resting on OKX, not executed yet */}
+          <div className="max-h-64 overflow-y-auto rounded-xl border border-zinc-800 bg-zinc-900/60 p-5 [scrollbar-color:#3f3f46_transparent]">
             <p className="mb-2 text-xs font-semibold tracking-widest text-zinc-300">OPEN ORDERS</p>
             {orders.length === 0 && <p className="text-xs italic text-zinc-600">No open orders</p>}
             {orders.map((o, i) => (
-              <p key={i} className="py-1 text-sm text-zinc-300">
+              <p key={o.ordId ?? i} className="border-b border-zinc-800 py-1.5 text-sm last:border-0">
+                <span className="text-zinc-500">{fmtTs(o.cTime)}</span>{" "}
                 <span className={o.side === "buy" ? "font-bold text-rose-400" : "font-bold text-emerald-400"}>
                   {o.side.toUpperCase()}
                 </span>{" "}
-                @ {o.px} <span className="text-zinc-500">({o.sz})</span>
+                <span className="text-zinc-300">@ ${o.px}</span>{" "}
+                <span className="text-zinc-500">— {o.sz} {baseCcy}</span>
               </p>
             ))}
           </div>
-  
-          <div className="max-h-48 overflow-y-auto rounded-xl border border-zinc-800 bg-zinc-900/60 p-5 [scrollbar-color:#3f3f46_transparent]">
-            <p className="mb-2 text-xs font-semibold tracking-widest text-zinc-300">RECENT LOGS</p>
-            {history.length === 0 && <p className="text-xs italic text-zinc-600">No trades yet</p>}
-            {history.slice().reverse().map((t, i) => {
-              const d = new Date(t.timestamp * 1000);
-              return (
-                <p key={i} className="border-b border-zinc-800 py-1.5 text-sm last:border-0">
-                  <span className="text-zinc-500">
-                    [{d.toLocaleDateString("sv-SE")} {d.toLocaleTimeString()}]
+
+          {/* FILLED ORDERS: trades OKX actually executed */}
+          <div className="max-h-64 overflow-y-auto rounded-xl border border-zinc-800 bg-zinc-900/60 p-5 [scrollbar-color:#3f3f46_transparent]">
+            <p className="mb-2 text-xs font-semibold tracking-widest text-zinc-300">FILLED ORDERS</p>
+            {fills.length === 0 && <p className="text-xs italic text-zinc-600">No filled orders yet</p>}
+            {fills
+              .slice()
+              .sort((a, b) => Number(b.ts) - Number(a.ts))
+              .map((f, i) => (
+                <p key={f.tradeId ?? i} className="border-b border-zinc-800 py-1.5 text-sm last:border-0">
+                  <span className="text-zinc-500">{fmtTs(f.ts)}</span>{" "}
+                  <span className={f.side === "buy" ? "font-bold text-rose-400" : "font-bold text-emerald-400"}>
+                    {f.side.toUpperCase()}
                   </span>{" "}
-                  <span className={t.side === "buy" ? "font-bold text-rose-400" : "font-bold text-emerald-400"}>
-                    {t.side.toUpperCase()}
-                  </span>{" "}
-                  <span className="text-zinc-300">@ ${t.price}</span>{" "}
-                  <span className="text-zinc-500">— {t.size}</span>
+                  <span className="text-zinc-300">@ ${f.fillPx}</span>{" "}
+                  <span className="text-zinc-500">— {f.fillSz} {baseCcy}</span>
+                  {f.fee && (
+                    <span className="text-zinc-600"> · fee {f.fee} {f.feeCcy}</span>
+                  )}
                 </p>
-              );
-            })}
+              ))}
           </div>
+
         </div>
   
       </div>

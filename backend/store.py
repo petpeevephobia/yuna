@@ -12,12 +12,16 @@ DEFAULT_STATE = {
     },
     "bot_status": "paused",   # "active" | "paused" | "error"
     "trade_history": [],
+    "fired": {"buy": False, "sell": False},   # survives restarts
 }
 
 def load_state() -> dict:
     if not DATA_FILE.exists():
         save_state(DEFAULT_STATE)
-    return json.loads(DATA_FILE.read_text())
+    state = json.loads(DATA_FILE.read_text())
+    # older data.json files have no "fired" key yet
+    state.setdefault("fired", {"buy": False, "sell": False})
+    return state
 
 def save_state(state: dict) -> None:
     DATA_FILE.write_text(json.dumps(state, indent=2))
@@ -36,4 +40,17 @@ def set_bot_status(status: str) -> None:
 def append_trade(trade: dict) -> None:
     state = load_state()
     state["trade_history"].append(trade)
+    save_state(state)
+
+def mark_fired(side: str) -> None:
+    """Record that `side` fired and re-arm the opposite side (ping-pong cycle)."""
+    state = load_state()
+    other = "sell" if side == "buy" else "buy"
+    state["fired"][side] = True
+    state["fired"][other] = False
+    save_state(state)
+
+def reset_fired() -> None:
+    state = load_state()
+    state["fired"] = {"buy": False, "sell": False}
     save_state(state)

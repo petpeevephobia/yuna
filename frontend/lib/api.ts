@@ -42,6 +42,11 @@ export async function getPendingOrders(instId: string) {
   return res.json();
 }
 
+export async function getFilledOrders(instId: string) {
+  const res = await fetch(`${BASE_URL}/api/orders/filled?inst_id=${instId}`);
+  return res.json();
+}
+
 export async function getTradeHistory() {
   const res = await fetch(`${BASE_URL}/api/trades/history`);
   return res.json();
