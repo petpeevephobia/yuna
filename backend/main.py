@@ -33,6 +33,7 @@ class SettingsIn(BaseModel):
     inst_id: str
     buy_trigger: float | None = None
     sell_trigger: float | None = None
+    stop_loss: float | None = None
     order_size: str | None = None
 
 @app.get("/api/status")

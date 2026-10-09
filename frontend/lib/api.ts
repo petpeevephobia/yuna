@@ -7,8 +7,9 @@ export async function getStatus() {
 
 export async function postSettings(settings: {
   inst_id: string;
-  buy_trigger?: number;
-  sell_trigger?: number;
+  buy_trigger?: number | null;
+  sell_trigger?: number | null;
+  stop_loss?: number | null;
   order_size?: string;
 }) {
   const res = await fetch(`${BASE_URL}/api/settings`, {

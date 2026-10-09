@@ -28,3 +28,17 @@
    - **Solution:** I switched get_fills() in okx_client.py to /api/v5/trade/fills-history (about 3 months, instType=SPOT required, up to 100 rows). In page.tsx, calculatePnL now runs on the fills: it sorts them by time, matches each sell against earlier buys first-in-first-out, and includes fees (a fee in BTC reduces the quantity bought, a fee in USDT adjusts cost or proceeds). Sold quantity with no matching buy, such as the demo account's starting BTC, has no cost basis and is left out. A completed cycle is a sell order that closed bought quantity, counted once per order so partial fills don't inflate it. I removed the unused history state and the getTradeHistory call from the dashboard.
 
 **Still open:** fills-history returns at most 100 rows per request and I don't paginate, so a very busy account would be truncated. bot_loop.py still writes trade_history to data.json; the dashboard no longer reads it. Hard to view all filled orders.
+
+
+## 10.10.2026, Saturday
+
+1. **Stop-loss setting value failed to reset/clear when left empty**
+   - **Challenge:** Leaving the Stop-Loss input field empty in the UI drawer failed to clear `"stop_loss"` in `data.json`[cite: 1]. It either evaluated to `NaN` in JavaScript, required entering `"0"` to show `DISABLED`, or left the old value unchanged in `data.json`[cite: 1].
+   - **Solution:** Traced the issue to three root causes across the stack:
+     1. **`backend/main.py`:** The `/api/settings` endpoint used `payload.dict(exclude_none=True)`, which stripped `null` fields out of the payload before updating `data.json`, preventing existing settings from being reset to `None`[cite: 1].
+     2. **`frontend/app/page.tsx`:** `saveSettings()` now explicitly maps empty strings / `NaN` inputs to `null` instead of passing invalid values[cite: 1].
+     3. **`frontend/app/page.tsx`:** Added a `useEffect` hook to sync the drawer's input state with `status.settings` so existing settings load properly when refreshing or opening the drawer[cite: 1].
+
+**Still open:**
+   - The stop-loss trigger logic in `backend/bot_loop.py` still needs to be fully integrated and end-to-end tested in OKX Demo Trading to ensure it executes a limit sell for `last_bought_qty` when market price drops to or below `stop_loss`[cite: 1].
+   - fills-history returns at most 100 rows per request and I don't paginate, so a very busy account would be truncated. bot_loop.py still writes trade_history to data.json; the dashboard no longer reads it. Hard to view all filled orders.

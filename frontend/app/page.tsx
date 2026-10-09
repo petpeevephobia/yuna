@@ -15,6 +15,7 @@ export default function Dashboard() {
 
   const [buyTrigger, setBuyTrigger] = useState("");
   const [sellTrigger, setSellTrigger] = useState("");
+  const [stopLoss, setStopLoss] = useState("");
   const [orderSize, setOrderSize] = useState("");
 
   const instId = "BTC-USDT";
@@ -37,10 +38,15 @@ export default function Dashboard() {
   }, []);
 
   async function saveSettings() {
+    const parsedBuy = parseFloat(buyTrigger);
+    const parsedSell = parseFloat(sellTrigger);
+    const parsedSL = parseFloat(stopLoss);
+  
     await postSettings({
       inst_id: instId,
-      buy_trigger: parseFloat(buyTrigger),
-      sell_trigger: parseFloat(sellTrigger),
+      buy_trigger: !isNaN(parsedBuy) ? parsedBuy : null,
+      sell_trigger: !isNaN(parsedSell) ? parsedSell : null,
+      stop_loss: !isNaN(parsedSL) && parsedSL > 0 ? parsedSL : null,       // Sets null if empty or 0
       order_size: orderSize,
     });
     refresh();
@@ -177,6 +183,12 @@ export default function Dashboard() {
                     <span className="block text-[10px] tracking-widest text-zinc-500">SELL TRIGGER</span>
                     <span className="mt-1 block text-base font-bold text-emerald-400">
                       {status?.settings?.sell_trigger ? `$${status.settings.sell_trigger}` : "NOT SET"}
+                    </span>
+                  </div>
+                  <div className="rounded-lg border border-zinc-800 bg-zinc-950/70 p-3">
+                    <span className="block text-[10px] tracking-widest text-zinc-500">STOP LOSS</span>
+                    <span className="mt-1 block text-base font-bold text-red-400">
+                      {status?.settings?.stop_loss ? `$${status.settings.stop_loss}` : "DISABLED"}
                     </span>
                   </div>
                   <div className="rounded-lg border border-zinc-800 bg-zinc-950/70 p-3">
@@ -348,6 +360,12 @@ export default function Dashboard() {
             value={sellTrigger}
             onChange={e => setSellTrigger(e.target.value)}
             className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 outline-none transition-colors focus:border-emerald-500/60"
+          />
+          <input
+            placeholder="Stop-Loss Price (leave empty to remove)"
+            value={stopLoss}
+            onChange={e => setStopLoss(e.target.value)}
+            className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 outline-none transition-colors focus:border-red-500/60"
           />
           <input
             placeholder="Order Size"

@@ -8,11 +8,12 @@ DEFAULT_STATE = {
         "inst_id": "BTC-USDT",
         "buy_trigger": None,
         "sell_trigger": None,
+        "stop_loss": None,
         "order_size": None,
     },
     "bot_status": "paused",   # "active" | "paused" | "error"
     "trade_history": [],
-    "fired": {"buy": False, "sell": False},   # survives restarts
+    "fired": {"buy": False, "sell": False, "stop_loss": False},   # survives restarts
     "last_bought_qty": 0.0,
 }
 
@@ -20,8 +21,8 @@ def load_state() -> dict:
     if not DATA_FILE.exists():
         save_state(DEFAULT_STATE)
     state = json.loads(DATA_FILE.read_text())
-    # older data.json files have no "fired" key yet
-    state.setdefault("fired", {"buy": False, "sell": False})
+    state.setdefault("fired", {"buy": False, "sell": False, "stop_loss": False})
+    state["settings"].setdefault("stop_loss", None)
     state.setdefault("last_bought_qty", 0.0)
     return state
 
@@ -59,6 +60,5 @@ def mark_fired(side: str) -> None:
 
 def reset_fired() -> None:
     state = load_state()
-    state["fired"] = {"buy": False, "sell": False}
-    # Optional: state["last_bought_qty"] = 0.0
+    state["fired"] = {"buy": False, "sell": False, "stop_loss": False}
     save_state(state)

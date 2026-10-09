@@ -87,4 +87,45 @@ async def bot_loop():
             except Exception as e:
                 print(f"[bot_loop] sell order failed at network layer: {e}")
 
+        # Extract stop_loss from settings
+        stop_loss = settings.get("stop_loss")
+
+        # --- STOP-LOSS BRANCH ---
+        # Explicit check ensuring stop_loss is an actual positive threshold
+        if stop_loss is not None and stop_loss > 0 and price <= stop_loss and fired["buy"] and not fired.get("stop_loss", False):
+            try:
+                balances = client.get_balance()
+                available_btc = balances.get("BTC", 0.0)
+
+                target_qty = last_bought_qty if last_bought_qty > 0 else available_btc
+                qty_to_sell = min(target_qty, available_btc)
+
+                if qty_to_sell < 0.0001:
+                    print(f"[bot_loop] Stop-Loss skipped: Insufficient BTC balance ({available_btc})")
+                    await asyncio.sleep(POLL_INTERVAL_SECONDS)
+                    continue
+
+                sell_size = str(round(qty_to_sell, 6))
+
+                # Place market-equivalent limit sell at current price
+                client.place_limit_order(inst_id, "sell", price, sell_size)
+                
+                # Mark stop_loss fired, re-arm buy side
+                state["fired"]["stop_loss"] = True
+                mark_fired("sell")  # Re-arms buy side in store
+                set_last_bought_qty(0.0)
+
+                fulfilled_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+                append_trade({
+                    "timestamp": time.time(), 
+                    "side": "sell (stop-loss)",
+                    "price": price, 
+                    "size": f"{sell_size} BTC",
+                    "status_msg": f"STOP-LOSS TRIGGERED ON {fulfilled_time}"
+                })
+
+                print(f"[bot_loop] STOP-LOSS executed for {sell_size} BTC @ {price}")
+            except Exception as e:
+                print(f"[bot_loop] stop-loss order failed: {e}")
+
         await asyncio.sleep(POLL_INTERVAL_SECONDS)
