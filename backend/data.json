@@ -1,8 +1,8 @@
 {
   "settings": {
     "inst_id": "BTC-USDT",
-    "buy_trigger": 85350.0,
-    "sell_trigger": 85400.0,
+    "buy_trigger": 82600.0,
+    "sell_trigger": 82800.0,
     "order_size": "50"
   },
   "bot_status": "paused",
@@ -34,6 +34,151 @@
       "price": 85350.0,
       "size": "50 USDT (0.000586 BTC)",
       "status_msg": "FULFILLED ON 2026-10-04 20:12:50"
+    },
+    {
+      "timestamp": 1791582443.023859,
+      "side": "buy",
+      "price": 82600.0,
+      "size": "50 USDT (0.000605 BTC)",
+      "status_msg": "FULFILLED ON 2026-10-09 23:47:23"
+    },
+    {
+      "timestamp": 1791582695.9081671,
+      "side": "buy",
+      "price": 82600.0,
+      "size": "50 USDT (0.000605 BTC)",
+      "status_msg": "FULFILLED ON 2026-10-09 23:51:35"
+    },
+    {
+      "timestamp": 1791582696.976899,
+      "side": "sell",
+      "price": 82516.2,
+      "size": "0.000605 BTC",
+      "status_msg": "FULFILLED ON 2026-10-09 23:51:36"
+    },
+    {
+      "timestamp": 1791582708.0956042,
+      "side": "buy",
+      "price": 82600.0,
+      "size": "50 USDT (0.000605 BTC)",
+      "status_msg": "FULFILLED ON 2026-10-09 23:51:48"
+    },
+    {
+      "timestamp": 1791582719.7395468,
+      "side": "sell",
+      "price": 82528.2,
+      "size": "0.000605 BTC",
+      "status_msg": "FULFILLED ON 2026-10-09 23:51:59"
+    },
+    {
+      "timestamp": 1791582730.8838165,
+      "side": "buy",
+      "price": 82600.0,
+      "size": "50 USDT (0.000605 BTC)",
+      "status_msg": "FULFILLED ON 2026-10-09 23:52:10"
+    },
+    {
+      "timestamp": 1791582742.5448377,
+      "side": "sell",
+      "price": 82530.6,
+      "size": "0.000605 BTC",
+      "status_msg": "FULFILLED ON 2026-10-09 23:52:22"
+    },
+    {
+      "timestamp": 1791582753.7403786,
+      "side": "buy",
+      "price": 82600.0,
+      "size": "50 USDT (0.000605 BTC)",
+      "status_msg": "FULFILLED ON 2026-10-09 23:52:33"
+    },
+    {
+      "timestamp": 1791582765.333055,
+      "side": "sell",
+      "price": 82536.1,
+      "size": "0.000605 BTC",
+      "status_msg": "FULFILLED ON 2026-10-09 23:52:45"
+    },
+    {
+      "timestamp": 1791582776.4696162,
+      "side": "buy",
+      "price": 82600.0,
+      "size": "50 USDT (0.000605 BTC)",
+      "status_msg": "FULFILLED ON 2026-10-09 23:52:56"
+    },
+    {
+      "timestamp": 1791582788.2113724,
+      "side": "sell",
+      "price": 82536.1,
+      "size": "0.000605 BTC",
+      "status_msg": "FULFILLED ON 2026-10-09 23:53:08"
+    },
+    {
+      "timestamp": 1791582799.3986459,
+      "side": "buy",
+      "price": 82600.0,
+      "size": "50 USDT (0.000605 BTC)",
+      "status_msg": "FULFILLED ON 2026-10-09 23:53:19"
+    },
+    {
+      "timestamp": 1791582811.1266909,
+      "side": "sell",
+      "price": 82531.9,
+      "size": "0.000605 BTC",
+      "status_msg": "FULFILLED ON 2026-10-09 23:53:31"
+    },
+    {
+      "timestamp": 1791582822.2530615,
+      "side": "buy",
+      "price": 82600.0,
+      "size": "50 USDT (0.000605 BTC)",
+      "status_msg": "FULFILLED ON 2026-10-09 23:53:42"
+    },
+    {
+      "timestamp": 1791582833.9234319,
+      "side": "sell",
+      "price": 82531.9,
+      "size": "0.000605 BTC",
+      "status_msg": "FULFILLED ON 2026-10-09 23:53:53"
+    },
+    {
+      "timestamp": 1791582845.1391082,
+      "side": "buy",
+      "price": 82600.0,
+      "size": "50 USDT (0.000605 BTC)",
+      "status_msg": "FULFILLED ON 2026-10-09 23:54:05"
+    },
+    {
+      "timestamp": 1791582856.7733524,
+      "side": "sell",
+      "price": 82531.9,
+      "size": "0.000605 BTC",
+      "status_msg": "FULFILLED ON 2026-10-09 23:54:16"
+    },
+    {
+      "timestamp": 1791582867.952113,
+      "side": "buy",
+      "price": 82600.0,
+      "size": "50 USDT (0.000605 BTC)",
+      "status_msg": "FULFILLED ON 2026-10-09 23:54:27"
+    },
+    {
+      "timestamp": 1791582879.7223759,
+      "side": "sell",
+      "price": 82531.3,
+      "size": "0.000605 BTC",
+      "status_msg": "FULFILLED ON 2026-10-09 23:54:39"
+    },
+    {
+      "timestamp": 1791582890.880599,
+      "side": "buy",
+      "price": 82600.0,
+      "size": "50 USDT (0.000605 BTC)",
+      "status_msg": "FULFILLED ON 2026-10-09 23:54:50"
     }
-  ]
+  ],
+  "fired": {
+    "buy": true,
+    "sell": false
+  },
+  "last_bought_qty": 0.000605
 }

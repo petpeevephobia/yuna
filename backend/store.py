@@ -13,6 +13,7 @@ DEFAULT_STATE = {
     "bot_status": "paused",   # "active" | "paused" | "error"
     "trade_history": [],
     "fired": {"buy": False, "sell": False},   # survives restarts
+    "last_bought_qty": 0.0,
 }
 
 def load_state() -> dict:
@@ -21,7 +22,13 @@ def load_state() -> dict:
     state = json.loads(DATA_FILE.read_text())
     # older data.json files have no "fired" key yet
     state.setdefault("fired", {"buy": False, "sell": False})
+    state.setdefault("last_bought_qty", 0.0)
     return state
+
+def set_last_bought_qty(qty: float) -> None:
+    state = load_state()
+    state["last_bought_qty"] = qty
+    save_state(state)
 
 def save_state(state: dict) -> None:
     DATA_FILE.write_text(json.dumps(state, indent=2))
@@ -53,4 +60,5 @@ def mark_fired(side: str) -> None:
 def reset_fired() -> None:
     state = load_state()
     state["fired"] = {"buy": False, "sell": False}
+    # Optional: state["last_bought_qty"] = 0.0
     save_state(state)

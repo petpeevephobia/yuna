@@ -1,12 +1,10 @@
 import asyncio
 import time
 from okx_client import OKXClient
-from store import load_state, set_bot_status, append_trade, mark_fired
+from store import load_state, set_bot_status, append_trade, mark_fired, set_last_bought_qty
 
 POLL_INTERVAL_SECONDS = 10
 client = OKXClient()
-
-# "fired" flags (so we don't spam orders) live in data.json via store.py, so they survive restarts
 
 async def bot_loop():
     while True:
@@ -17,6 +15,7 @@ async def bot_loop():
 
         settings = state["settings"]
         fired = state["fired"]
+        last_bought_qty = state.get("last_bought_qty", 0.0)
         inst_id = settings["inst_id"]
         buy_trigger = settings.get("buy_trigger")
         sell_trigger = settings.get("sell_trigger")
@@ -31,49 +30,50 @@ async def bot_loop():
             await asyncio.sleep(POLL_INTERVAL_SECONDS)
             continue
 
-
+        # --- BUY BRANCH ---
         if buy_trigger and price <= buy_trigger and not fired["buy"]:
             try:
                 btc_qty = round(float(order_size) / buy_trigger, 6)
                 client.place_limit_order(inst_id, "buy", buy_trigger, str(btc_qty))
-                mark_fired("buy")  # persist right after the order goes out
                 
-                # Create a formatted human-readable date & time string
+                # Save the quantity bought so the sell branch knows how much to sell
+                set_last_bought_qty(btc_qty)
+                mark_fired("buy")
+                
                 fulfilled_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
-                
-                # Append to trade history array (this feeds your UI log terminal)
                 append_trade({
                     "timestamp": time.time(), 
                     "side": "buy",
                     "price": buy_trigger, 
                     "size": f"{order_size} USDT ({btc_qty} BTC)",
-                    "status_msg": f"FULFILLED ON {fulfilled_time}" # <-- Explicit fulfillment clock
+                    "status_msg": f"FULFILLED ON {fulfilled_time}"
                 })
                 
-                print(f"[bot_loop] BUY order placed @ {buy_trigger}")
+                print(f"[bot_loop] BUY order placed @ {buy_trigger} for {btc_qty} BTC")
             except Exception as e:
                 print(f"[bot_loop] buy order failed: {e}")
 
-
+        # --- SELL BRANCH ---
         if sell_trigger and price >= sell_trigger and not fired["sell"]:
             try:
-                # 1. Fetch your exact, live available BTC balance directly from the exchange
                 balances = client.get_balance()
                 available_btc = balances.get("BTC", 0.0)
 
-                if available_btc < 0.0001:
-                    print(f"[bot_loop] Sell skipped: Insufficient BTC balance ({available_btc})")
-                    await asyncio.sleep(POLL_INTERVAL_SECONDS)  # don't hammer OKX while waiting for BTC
+                # Target quantity is only what Yuna bought (fallback to available_btc if 0)
+                target_qty = last_bought_qty if last_bought_qty > 0 else available_btc
+                qty_to_sell = min(target_qty, available_btc)
+
+                if qty_to_sell < 0.0001:
+                    print(f"[bot_loop] Sell skipped: Insufficient BTC balance ({available_btc}) for target ({target_qty})")
+                    await asyncio.sleep(POLL_INTERVAL_SECONDS)
                     continue
 
-                # 2. Sell your [ENTIRE] available BTC cache instead of back-calculating a fractional size
-                sell_size = str(round(available_btc, 6))
+                sell_size = str(round(qty_to_sell, 6))
                 
-                # Place the limit sell order at the current market price rather than the trigger line
                 client.place_limit_order(inst_id, "sell", price, sell_size)
-                mark_fired("sell")  # persist right after the order goes out
+                mark_fired("sell")
+                set_last_bought_qty(0.0)  # Reset bought quantity after sell
                 
-                # Update your tracking logs with the true executed asset values
                 fulfilled_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
                 append_trade({
                     "timestamp": time.time(), 
@@ -86,10 +86,5 @@ async def bot_loop():
                 print(f"[bot_loop] SELL order successfully executed for {sell_size} BTC")
             except Exception as e:
                 print(f"[bot_loop] sell order failed at network layer: {e}")
-
-
- 
-
-
 
         await asyncio.sleep(POLL_INTERVAL_SECONDS)
